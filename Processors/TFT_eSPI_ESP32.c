@@ -68,10 +68,11 @@ uint8_t TFT_eSPI::readByte(void)
 
 #if defined (TFT_PARALLEL_8_BIT)
   RD_L;
-  uint32_t reg;           // Read all GPIO pins 0-31
+  uint32_t reg, regh;     // Read all GPIO pins 0-31
   reg = gpio_input_get(); // Read three times to allow for bus access time
   reg = gpio_input_get();
   reg = gpio_input_get(); // Data should be stable now
+  regh = gpio_input_get_high();
   RD_H;
 
   // Check GPIO bits used and build value
@@ -82,7 +83,7 @@ uint8_t TFT_eSPI::readByte(void)
   b |= (((reg>>TFT_D4)&1) << 4);
   b |= (((reg>>TFT_D5)&1) << 5);
   b |= (((reg>>TFT_D6)&1) << 6);
-  b |= (((reg>>TFT_D7)&1) << 7);
+  b |= (((regh>>(TFT_D7 - 32))&1) << 7);
 #endif
 
   return b;
@@ -126,8 +127,20 @@ void TFT_eSPI::busDir(uint32_t mask, uint8_t mode)
 ***************************************************************************************/
 void TFT_eSPI::gpioMode(uint8_t gpio, uint8_t mode)
 {
-  if(mode == INPUT) GPIO.enable_w1tc = ((uint32_t)1 << gpio);
-  else GPIO.enable_w1ts = ((uint32_t)1 << gpio);
+  if(mode == INPUT)
+  {
+    if(gpio >= 32)
+      GPIO.enable1_w1tc.val = ((uint32_t)1 << (gpio - 32));
+    else
+      GPIO.enable_w1tc = ((uint32_t)1 << gpio);
+  }
+  else
+  {
+    if (gpio >= 32)
+      GPIO.enable1_w1ts.val = ((uint32_t)1 << (gpio - 32));
+    else
+      GPIO.enable_w1ts = ((uint32_t)1 << gpio);
+  }
 
   ESP_REG(DR_REG_IO_MUX_BASE + esp32_gpioMux[gpio].reg) // Register lookup
     = ((uint32_t)2 << FUN_DRV_S)                        // Set drive strength 2
